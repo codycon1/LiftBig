@@ -75,6 +75,7 @@ const MENU_HIDE_AFTER_BLUR_MS = 380
 const repsScrollTargetMax = computed(() => finiteGoalRepMaxForScroll(props.targetReps))
 
 const repsMenuRef = ref<HTMLElement | null>(null)
+const repsInputRef = ref<HTMLInputElement | null>(null)
 
 /** Integers min…max alternating outward from anchor (higher, lower, …). */
 function expandIntsFromAnchor(anchor: number, min: number, max: number): number[] {
@@ -330,6 +331,7 @@ function selectWeightOption(rawDisplay: string) {
   onWeightInput(rawDisplay)
   showWeightMenu.value = false
   syncSetLoggingFocus()
+  maybeAdvanceAfterWeight(displayInputToStoredLbsString(rawDisplay, weightUnit.value))
 }
 
 function selectRepsOption(raw: string) {
@@ -340,9 +342,25 @@ function selectRepsOption(raw: string) {
   maybeAdvanceAfterReps(raw)
 }
 
+function onWeightBlur() {
+  hideWeightMenuSoon()
+  maybeAdvanceAfterWeight(props.set.weight)
+}
+
 function onRepsBlur() {
   hideRepsMenuSoon()
   maybeAdvanceAfterReps(props.set.reps)
+}
+
+function maybeAdvanceAfterWeight(weightValue: string) {
+  if (!settings.autoAdvanceRepsToWeight.value) return
+  if (!weightValue.trim()) return
+  window.setTimeout(() => {
+    const el = repsInputRef.value
+    if (!el) return
+    el.focus()
+    el.select()
+  }, MENU_HIDE_AFTER_BLUR_MS + 40)
 }
 
 function maybeAdvanceAfterReps(repsValue: string) {
@@ -418,7 +436,7 @@ function handleRepsTap(e: MouseEvent) {
         class="min-w-0 w-full rounded-lg border border-border bg-card-inner px-2 py-1.5 text-center text-base text-foreground outline-none focus:border-primary"
         :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
         @focus="onWeightFocus"
-        @blur="hideWeightMenuSoon(); weightDoubleTap.reset()"
+        @blur="onWeightBlur(); weightDoubleTap.reset()"
         @click="handleWeightTap"
         @input="onWeightInput(($event.target as HTMLInputElement).value)"
       />
@@ -453,6 +471,7 @@ function handleRepsTap(e: MouseEvent) {
     </div>
     <div class="relative min-w-0 flex-1 basis-0">
       <input
+        ref="repsInputRef"
         :value="set.reps"
         type="text"
         inputmode="numeric"

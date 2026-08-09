@@ -70,7 +70,7 @@ export type AppSettings = {
   dailyLiftReminderTime: string
   /** Double-tap reps or weight field to copy previous set's value. */
   doubleTapCopyWeight: boolean
-  /** After logging reps, focus the next set's weight field. */
+  /** After weight, focus that set's reps; after reps, focus the next set's weight. */
   autoAdvanceRepsToWeight: boolean
   /** Short sound when rest timer completes. */
   timerSoundEnabled: boolean

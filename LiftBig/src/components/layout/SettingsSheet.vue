@@ -562,7 +562,7 @@ watch(
             />
           </label>
           <label class="flex items-center justify-between gap-3">
-            <span class="text-sm font-bold text-foreground">Auto-advance to next set's weight after reps</span>
+            <span class="text-sm font-bold text-foreground">Auto-advance: weight → reps → next set's weight</span>
             <input
               type="checkbox"
               class="h-5 w-5 rounded border-border"
