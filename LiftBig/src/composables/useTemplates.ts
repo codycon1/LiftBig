@@ -145,7 +145,7 @@ function ensureProgramSeeds(state: TemplatesState): TemplatesState {
       )
     : [...folders, ...cloneFolders([JOEY_FALL_BULK_V2_FOLDER])]
 
-  // Keep Joey Fall Bulk v2 first, then original Fall Bulk, in the Plans folder list.
+  // Keep Joey Fall Bulk v3 (same folder id as v2) first, then original Fall Bulk, in the Plans folder list.
   folders = [
     ...folders.filter((folder) => folder.id === JOEY_FALL_BULK_V2_FOLDER.id),
     ...folders.filter((folder) => folder.id === JOEY_FALL_BULK_FOLDER.id),
