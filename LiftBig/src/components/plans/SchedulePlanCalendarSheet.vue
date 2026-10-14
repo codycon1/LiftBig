@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { WorkoutTemplate } from '@/types/workout'
 import { isValidDateKey, todayKey } from '@/utils/dateKey'
 import { estimatePlanDurationMinutes, formatPlanDurationEstimate } from '@/utils/planDuration'
+import { isStackOnDayPlan } from '@/utils/schedulePlanProgram'
 
 const props = defineProps<{
   open: boolean
@@ -17,6 +18,9 @@ const emit = defineEmits<{
 /** HTML date input value YYYY-MM-DD */
 const startDateInput = ref('')
 const restDaysPerWeek = ref(0)
+const stacksOntoExistingDay = computed(() =>
+  props.template ? isStackOnDayPlan(props.template) : false,
+)
 
 watch(
   () => props.open,
@@ -39,7 +43,10 @@ function submit() {
     window.alert('Pick a valid start date.')
     return
   }
-  emit('apply', { startDateKey: key, restDaysPerWeek: restDaysPerWeek.value })
+  emit('apply', {
+    startDateKey: key,
+    restDaysPerWeek: stacksOntoExistingDay.value ? 0 : restDaysPerWeek.value,
+  })
 }
 </script>
 
@@ -68,7 +75,13 @@ function submit() {
           class="mt-1 w-full rounded-lg border border-border bg-card-inner px-3 py-2 text-foreground outline-none focus:border-primary"
         />
 
-        <div class="mt-4 rounded-xl border border-border bg-card-inner px-3 py-3">
+        <div v-if="stacksOntoExistingDay" class="mt-4 rounded-xl border border-border bg-card-inner px-3 py-3">
+          <p class="text-[11px] leading-snug text-muted">
+            Adds this routine onto the date you pick, including a day that already has another workout. It is not part
+            of the Mon–Sun week.
+          </p>
+        </div>
+        <div v-else class="mt-4 rounded-xl border border-border bg-card-inner px-3 py-3">
           <label class="block text-[10px] font-bold uppercase tracking-wide text-muted">
             Rest days per 7-day block
           </label>

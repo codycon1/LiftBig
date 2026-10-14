@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, ref, watch } from 'vue'
 import { settingsInjectionKey } from '@/composables/injectionKeys'
+import { useWeightFieldDraft } from '@/composables/useWeightFieldDraft'
 import { useWorkoutSetLoggingFocusConsumer } from '@/composables/useWorkoutSetLoggingFocus'
 import type { SetLog } from '@/types/workout'
 import { finiteGoalRepMaxForScroll, REP_QUICK_PICK_DESCENDING } from '@/utils/progressiveOverload'
@@ -63,8 +64,30 @@ watch(
 const settings = inject(settingsInjectionKey)!
 const setLoggingFocus = useWorkoutSetLoggingFocusConsumer()
 const weightUnit = computed(() => settings.weightUnit.value)
+const weightField = useWeightFieldDraft(weightUnit)
 const showWeightMenu = ref(false)
 const showRepsMenu = ref(false)
+/** Rep options captured when the menu opens, so typing does not rebuild the list. */
+const repsMenuOptions = ref<string[]>([])
+
+/**
+ * Typing used to move the page to the bottom on phones: the picker re-scrolled
+ * (or rebuilt) while the keyboard was open, and the browser followed that scroll.
+ * If a keystroke still jumps the page, put it back.
+ */
+function keepWindowScroll(x: number, y: number) {
+  const fix = () => {
+    if (Math.abs(window.scrollY - y) > 80 || Math.abs(window.scrollX - x) > 2) {
+      window.scrollTo(x, y)
+    }
+  }
+  requestAnimationFrame(() => {
+    fix()
+    requestAnimationFrame(fix)
+  })
+  window.setTimeout(fix, 80)
+  window.setTimeout(fix, 240)
+}
 
 let weightMenuHideTimer: number | null = null
 let repsMenuHideTimer: number | null = null
@@ -97,11 +120,18 @@ function expandIntsFromAnchor(anchor: number, min: number, max: number): number[
   return out
 }
 
+function setMenuScrollTop(root: HTMLElement, top: number) {
+  const x = window.scrollX
+  const y = window.scrollY
+  root.scrollTop = top
+  if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y)
+}
+
 function alignRepsMenuScroll() {
   const root = repsMenuRef.value
   if (!root) return
   if (repsExpandAnchor.value != null) {
-    root.scrollTop = 0
+    setMenuScrollTop(root, 0)
     return
   }
 
@@ -114,7 +144,7 @@ function alignRepsMenuScroll() {
         const viewH = root.clientHeight
         const mid = btn.offsetTop + btn.offsetHeight / 2
         const maxScroll = Math.max(0, root.scrollHeight - viewH)
-        root.scrollTop = Math.max(0, Math.min(mid - viewH / 2, maxScroll))
+        setMenuScrollTop(root, Math.max(0, Math.min(mid - viewH / 2, maxScroll)))
         return
       }
     }
@@ -127,7 +157,7 @@ function alignRepsMenuScroll() {
   if (!btn) return
 
   const rowH = btn.offsetHeight || 40
-  root.scrollTop = Math.max(0, btn.offsetTop - REPS_MENU_TARGET_VISIBLE_INDEX * rowH)
+  setMenuScrollTop(root, Math.max(0, btn.offsetTop - REPS_MENU_TARGET_VISIBLE_INDEX * rowH))
 }
 
 /** Nearest 5 lb step in 0–500 for picker rows (stored lb string). */
@@ -182,13 +212,13 @@ function alignWeightMenuScroll() {
 
   const storedKey = weightMenuScrollTargetStored.value
   if (!storedKey) {
-    root.scrollTop = 0
+    setMenuScrollTop(root, 0)
     return
   }
 
   const btn = root.querySelector(`button[data-w-stored="${storedKey}"]`) as HTMLElement | null
   if (!btn) return
-  root.scrollTop = btn.offsetTop
+  setMenuScrollTop(root, btn.offsetTop)
 }
 
 const visibleRepsOptions = computed(() => {
@@ -225,7 +255,18 @@ const visibleWeightRows = computed(() => {
 })
 
 function onWeightInput(raw: string) {
-  emit('update', 'weight', displayInputToStoredLbsString(raw, weightUnit.value))
+  const x = window.scrollX
+  const y = window.scrollY
+  const next = weightField.input(raw)
+  if (next != null) emit('update', 'weight', next)
+  keepWindowScroll(x, y)
+}
+
+function onRepsInput(raw: string) {
+  const x = window.scrollX
+  const y = window.scrollY
+  emit('update', 'reps', raw)
+  keepWindowScroll(x, y)
 }
 
 function syncSetLoggingFocus() {
@@ -240,6 +281,7 @@ function syncSetLoggingFocus() {
 }
 
 async function onWeightFocus() {
+  weightField.focus(props.set.weight)
   setLoggingFocus?.enter()
   cancelWeightMenuHide()
   showWeightMenu.value = true
@@ -250,6 +292,7 @@ async function onWeightFocus() {
 }
 
 async function onRepsFocus() {
+  repsMenuOptions.value = visibleRepsOptions.value.slice()
   setLoggingFocus?.enter()
   cancelRepsMenuHide()
   showRepsMenu.value = true
@@ -266,7 +309,6 @@ watch([showWeightMenu, showRepsMenu], () => {
 watch(
   () =>
     [
-      props.set.weight,
       showWeightMenu.value,
       weightUnit.value,
       props.targetWeightStored,
@@ -283,8 +325,7 @@ watch(
 )
 
 watch(
-  () =>
-    [props.set.reps, showRepsMenu.value, props.priorSetReps, props.index] as const,
+  () => [showRepsMenu.value, props.priorSetReps, props.index] as const,
   async () => {
     if (!showRepsMenu.value) return
     await nextTick()
@@ -343,8 +384,13 @@ function selectRepsOption(raw: string) {
 }
 
 function onWeightBlur() {
+  let next = props.set.weight
+  if (weightField.focused.value) {
+    next = weightField.blur()
+    emit('update', 'weight', next)
+  }
   hideWeightMenuSoon()
-  maybeAdvanceAfterWeight(props.set.weight)
+  maybeAdvanceAfterWeight(next)
 }
 
 function onRepsBlur() {
@@ -377,6 +423,7 @@ function onWeightDoubleTap() {
   if (!prior) return
   haptic('tap')
   emit('update', 'weight', prior)
+  weightField.syncStored(prior)
 }
 
 function onRepsDoubleTap() {
@@ -402,7 +449,7 @@ function handleRepsTap(e: MouseEvent) {
 
 <template>
   <div
-    class="relative mb-2 flex min-w-0 items-center gap-2"
+    class="relative mb-2 flex min-w-0 items-center gap-2 [overflow-anchor:none]"
     :class="isWarmup ? 'rounded-lg bg-amber-500/10 px-1 -mx-1' : ''"
   >
     <div class="flex w-14 shrink-0 flex-col items-center">
@@ -427,7 +474,7 @@ function handleRepsTap(e: MouseEvent) {
     </div>
     <div class="relative min-w-0 flex-1 basis-0">
       <input
-        :value="storedLbsStringToDisplay(set.weight, weightUnit)"
+        :value="weightField.display(set.weight)"
         type="text"
         inputmode="decimal"
         data-touch-input
@@ -443,7 +490,7 @@ function handleRepsTap(e: MouseEvent) {
       <div
         v-if="showWeightMenu"
         ref="weightMenuRef"
-        class="absolute left-0 right-0 top-full z-30 mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+        class="absolute left-0 right-0 top-full z-30 mt-1 max-h-40 overflow-y-auto overscroll-contain rounded-lg border border-border bg-card shadow-lg [overflow-anchor:none]"
       >
         <button
           v-if="goalWeightRow"
@@ -482,15 +529,15 @@ function handleRepsTap(e: MouseEvent) {
         @focus="onRepsFocus"
         @blur="onRepsBlur(); repsDoubleTap.reset()"
         @click="handleRepsTap"
-        @input="emit('update', 'reps', ($event.target as HTMLInputElement).value)"
+        @input="onRepsInput(($event.target as HTMLInputElement).value)"
       />
       <div
         v-if="showRepsMenu"
         ref="repsMenuRef"
-        class="absolute left-0 right-0 top-full z-30 mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+        class="absolute left-0 right-0 top-full z-30 mt-1 max-h-40 overflow-y-auto overscroll-contain rounded-lg border border-border bg-card shadow-lg [overflow-anchor:none]"
       >
         <button
-          v-for="opt in visibleRepsOptions"
+          v-for="opt in repsMenuOptions"
           :key="`r-${set.id}-${opt}`"
           type="button"
           :data-rep="opt"

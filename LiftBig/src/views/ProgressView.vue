@@ -82,7 +82,7 @@ function fmtTonnage(lbs: number): string {
 
 function fmtWeight(lbs: number): string {
   if (lbs <= 0) return '—'
-  return formatWeightWithUnit(lbs, weightUnit.value, 0)
+  return formatWeightWithUnit(lbs, weightUnit.value, 1)
 }
 
 function fmtDeltaCount(n: number, prefix = 'vs prior'): string {

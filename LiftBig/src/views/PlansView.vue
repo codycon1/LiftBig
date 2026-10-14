@@ -16,7 +16,7 @@ import { LIFTBIG_LEGACY_STORAGE_KEY_ALIASES, LIFTBIG_STORAGE_KEYS } from '@/util
 import { loadJsonWithRecovery } from '@/utils/storage'
 import type { ExperienceLevel } from '@/types/planCatalog'
 import type { TemplateFolder, WorkoutTemplate } from '@/types/workout'
-import { addDaysToDateKey, isValidDateKey, todayKey } from '@/utils/dateKey'
+import { isValidDateKey, todayKey } from '@/utils/dateKey'
 import {
   findLibraryExerciseByName,
   getLibraryExercise,
@@ -33,7 +33,7 @@ import {
   ALL_PLAN_CATALOG,
   catalogEntryById,
 } from '@/utils/guidedPlans/guidedPlanCatalog'
-import { scheduledDateForPlanIndex, scheduleCatalogEntry } from '@/utils/schedulePlanProgram'
+import { folderCalendarSchedule, scheduleCatalogEntry } from '@/utils/schedulePlanProgram'
 import { supersetBadgeLabel } from '@/utils/supersetUtils'
 import { haptic } from '@/utils/haptics'
 import { formatWeightWithUnit, parseStoredLbs } from '@/utils/units'
@@ -645,23 +645,16 @@ function assignFolderPlansToCalendar(folderId: string) {
   }
 
   const restEvery = folderRestEveryValue(folderId)
+  const schedule = folderCalendarSchedule(plans, startDateKey, restEvery, folderId)
+  const workoutAssignments = schedule.assignments
+  const restDateKeys = schedule.restDateKeys
 
-  const finalConfirm = window.confirm(
-    `Add "${folderName}" to your calendar starting ${startDateKey}? This will schedule ${plans.length} plan${plans.length === 1 ? '' : 's'}.`,
-  )
+  const confirmMessage = schedule.weekdayWeek
+    ? `Add "${folderName}" starting ${startDateKey}? Mon–Sun go on those weekdays (${workoutAssignments.length} days). School routines are not added — use Calendar on School A–D to stack one onto a day that already has a workout.`
+    : `Add "${folderName}" to your calendar starting ${startDateKey}? This will schedule ${workoutAssignments.length} plan${workoutAssignments.length === 1 ? '' : 's'}.`
+
+  const finalConfirm = window.confirm(confirmMessage)
   if (!finalConfirm) return
-
-  const workoutAssignments = plans.map((plan, idx) => ({
-    plan,
-    dateKey: scheduledDateForPlanIndex(startDateKey, idx, restEvery),
-  }))
-
-  const restDateKeys: string[] = []
-  for (let i = 0; i < plans.length - 1; i++) {
-    if (restEvery > 0 && (i + 1) % restEvery === 0) {
-      restDateKeys.push(addDaysToDateKey(workoutAssignments[i]!.dateKey, 1))
-    }
-  }
 
   const duplicateHits = workoutAssignments.filter((slot) =>
     isLikelyDuplicatePlanAssignment(slot.dateKey, slot.plan),
@@ -736,9 +729,11 @@ function assignFolderPlansToCalendar(folderId: string) {
   }
 
   window.alert(
-    restEvery > 0
-      ? `${folderName} successfully added to calendar. Assigned ${plans.length} plan${plans.length === 1 ? '' : 's'} starting ${startDateKey} with 1 rest day every ${restEvery} workout day${restEvery === 1 ? '' : 's'}.`
-      : `${folderName} successfully added to calendar. Assigned ${plans.length} plan${plans.length === 1 ? '' : 's'} starting ${startDateKey} with no auto-inserted rest days.`,
+    schedule.weekdayWeek
+      ? `${folderName} added. Mon–Sun are on their matching weekdays starting ${startDateKey}. School A–D were left off so you can add them to a day that already has a workout.`
+      : restEvery > 0
+        ? `${folderName} successfully added to calendar. Assigned ${workoutAssignments.length} plan${workoutAssignments.length === 1 ? '' : 's'} starting ${startDateKey} with 1 rest day every ${restEvery} workout day${restEvery === 1 ? '' : 's'}.`
+        : `${folderName} successfully added to calendar. Assigned ${workoutAssignments.length} plan${workoutAssignments.length === 1 ? '' : 's'} starting ${startDateKey} with no auto-inserted rest days.`,
   )
 }
 
@@ -1195,6 +1190,13 @@ function onPlansRestSecondsChange(ev: Event) {
                 Add Folder to Calendar
               </button>
             </div>
+            <p
+              v-if="entry.folder.id === 'folder-joey-c4'"
+              class="mt-2 text-[10px] leading-snug text-muted"
+            >
+              Mon–Sun land on those weekdays. School A–D are not part of that week — use Calendar on a school plan to
+              add it onto a day that already has a workout.
+            </p>
           </div>
           <ul
             :ref="(el) => setFolderPlansUlRef(entry.folder.id, el)"

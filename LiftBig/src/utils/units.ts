@@ -38,10 +38,20 @@ export function parseStoredLbs(s: string): number {
   return parseFloat(String(s).replace(',', '.'))
 }
 
+/**
+ * True while a weight is only partly typed, e.g. "27." or "27.50".
+ * A finished value like "27.5" is not partial.
+ */
+export function isPartialWeightTyping(raw: string): boolean {
+  const t = String(raw).trim().replace(',', '.')
+  return /^\d+\.$/.test(t) || /^\d+\.\d*0$/.test(t)
+}
+
 /** Input field shows this value (from stored lb string). */
 export function storedLbsStringToDisplay(s: string, unit: WeightUnit): string {
-  const t = String(s).trim()
+  const t = String(s).trim().replace(',', '.')
   if (t === '') return ''
+  if (unit === 'lb' && isPartialWeightTyping(t)) return t
   const lbs = parseStoredLbs(t)
   if (Number.isNaN(lbs)) return t
   if (unit === 'lb') return normalizeDecimalString(t)
@@ -50,10 +60,22 @@ export function storedLbsStringToDisplay(s: string, unit: WeightUnit): string {
 
 /** Convert user input in the active unit to a string to store as lb. */
 export function displayInputToStoredLbsString(raw: string, unit: WeightUnit): string {
-  const t = String(raw).trim()
+  const t = String(raw).trim().replace(',', '.')
   if (t === '') return ''
-  const n = parseFloat(t.replace(',', '.'))
-  if (Number.isNaN(n)) return raw
+  // Keep "27." / "27.0" so a controlled input does not delete the decimal mid-typing.
+  if (unit === 'lb' && isPartialWeightTyping(t)) return t
+  const n = parseFloat(t)
+  if (Number.isNaN(n)) return t
+  if (unit === 'lb') return normalizeDecimalString(String(roundTo(n, 3)))
+  return normalizeDecimalString(String(roundTo(kgToLbs(n), 3)))
+}
+
+/** Normalize a finished weight entry (drops a trailing dot or extra zeros) to stored lb. */
+export function finalizeDisplayWeightToStoredLbs(raw: string, unit: WeightUnit): string {
+  const t = String(raw).trim().replace(',', '.')
+  if (t === '' || t === '.') return ''
+  const n = parseFloat(t)
+  if (Number.isNaN(n)) return ''
   if (unit === 'lb') return normalizeDecimalString(String(roundTo(n, 3)))
   return normalizeDecimalString(String(roundTo(kgToLbs(n), 3)))
 }

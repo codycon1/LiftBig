@@ -2,29 +2,42 @@ import type { WorkoutTemplate } from '@/types/workout'
 
 const WEEKDAY_ORDER: Record<string, number> = {
   monday: 1,
+  mon: 1,
   tuesday: 2,
+  tues: 2,
+  tue: 2,
   wednesday: 3,
+  wed: 3,
   thursday: 4,
+  thurs: 4,
+  thur: 4,
+  thu: 4,
   friday: 5,
+  fri: 5,
   saturday: 6,
+  sat: 6,
   sunday: 7,
+  sun: 7,
 }
 
 /** Sort key for plans inside a folder: week → day (numeric or weekday) → name. */
 export function folderPlanSortKey(name: string): [number, number, string] {
   const weekMatch = /week\s+(\d+)/i.exec(name)
   const dayMatch = /day\s+(\d+)/i.exec(name)
-  const weekdayMatch = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.exec(name.trim())
+  const weekdayMatch =
+    /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun)\b/i.exec(
+      name.trim(),
+    )
 
   const week = weekMatch ? Number.parseInt(weekMatch[1]!, 10) : Number.MAX_SAFE_INTEGER
-
-  if (dayMatch) {
-    return [week, Number.parseInt(dayMatch[1]!, 10), name.toLowerCase()]
-  }
 
   if (weekdayMatch) {
     const day = WEEKDAY_ORDER[weekdayMatch[1]!.toLowerCase()] ?? Number.MAX_SAFE_INTEGER
     return [week, day, name.toLowerCase()]
+  }
+
+  if (dayMatch) {
+    return [week, Number.parseInt(dayMatch[1]!, 10), name.toLowerCase()]
   }
 
   return [week, Number.MAX_SAFE_INTEGER, name.toLowerCase()]

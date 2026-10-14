@@ -2,8 +2,87 @@ import type { Exercise, TemplateExercise, WorkoutTemplate } from '@/types/workou
 import { cardioTargetDurationMinutes } from '@/types/workout'
 import { resolveExerciseIsCore } from '@/utils/exerciseLibrary'
 
+let idSerial = 0
+
 function newId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  idSerial = (idSerial + 1) % 1_000_000_000
+  return `${Date.now().toString(36)}-${idSerial.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Give each copied superset its own id so two plans on one day cannot share a Vue key. */
+function withFreshSupersetGroupIds(exercises: Exercise[]): Exercise[] {
+  const map = new Map<string, string>()
+  return exercises.map((ex) => {
+    const raw = ex.supersetGroupId?.trim()
+    if (!raw) return ex
+    let next = map.get(raw)
+    if (!next) {
+      next = `${raw}__${newId()}`
+      map.set(raw, next)
+    }
+    return { ...ex, supersetGroupId: next }
+  })
+}
+
+/**
+ * Exercise and set ids must be unique in one day. Duplicate keys make Vue reuse the
+ * wrong row and can lock the workout page in a recursive update.
+ */
+export function withUniqueExerciseIds(exercises: Exercise[]): Exercise[] {
+  const seenEx = new Set<string>()
+  const seenSet = new Set<string>()
+  let changed = false
+  const next = exercises.map((ex) => {
+    let id = ex.id
+    if (!id || seenEx.has(id)) {
+      id = newId()
+      changed = true
+    }
+    seenEx.add(id)
+    let setsChanged = false
+    const sets = ex.sets.map((set) => {
+      let setId = set.id
+      if (!setId || seenSet.has(setId)) {
+        setId = newId()
+        setsChanged = true
+      }
+      seenSet.add(setId)
+      if (setId === set.id) return set
+      return { ...set, id: setId }
+    })
+    if (id === ex.id && !setsChanged) return ex
+    changed = true
+    return { ...ex, id, sets }
+  })
+  return changed ? next : exercises
+}
+
+/** A repeated superset id later in the day is a second pair, not the same block. */
+export function separateRepeatedSupersetGroups(exercises: Exercise[]): Exercise[] {
+  const seen = new Set<string>()
+  const replacement = new Map<number, string>()
+  let i = 0
+  while (i < exercises.length) {
+    const id = exercises[i]?.supersetGroupId?.trim()
+    if (!id) {
+      i++
+      continue
+    }
+    let j = i + 1
+    while (j < exercises.length && exercises[j]?.supersetGroupId?.trim() === id) j++
+    if (seen.has(id)) {
+      const fresh = `${id}__${newId()}`
+      for (let k = i; k < j; k++) replacement.set(k, fresh)
+    } else {
+      seen.add(id)
+    }
+    i = j
+  }
+  if (replacement.size === 0) return exercises
+  return exercises.map((ex, index) => {
+    const id = replacement.get(index)
+    return id ? { ...ex, supersetGroupId: id } : ex
+  })
 }
 
 /**
@@ -11,7 +90,7 @@ function newId(): string {
  * and rep/weight goals — working sets are empty (no logged reps or weights).
  */
 export function cloneExercisesForCopy(source: Exercise[]): Exercise[] {
-  return source.map((ex) => ({
+  const copied = source.map((ex) => ({
     id: newId(),
     name: ex.name,
     libraryId: ex.libraryId,
@@ -40,11 +119,12 @@ export function cloneExercisesForCopy(source: Exercise[]): Exercise[] {
       return { id: newId(), reps: '', weight: '' }
     }),
   }))
+  return withFreshSupersetGroupIds(copied)
 }
 
 /** Maps a template to logged exercises with circuit + target fields preserved (Vue spec). */
 export function cloneTemplateToExercises(template: WorkoutTemplate): Exercise[] {
-  return template.exercises.map((tex: TemplateExercise) => {
+  const cloned = template.exercises.map((tex: TemplateExercise) => {
     if (tex.isCardio) {
       const durationGoal = cardioTargetDurationMinutes(tex)
       return {
@@ -100,4 +180,5 @@ export function cloneTemplateToExercises(template: WorkoutTemplate): Exercise[] 
       }),
     }
   })
+  return withFreshSupersetGroupIds(cloned)
 }

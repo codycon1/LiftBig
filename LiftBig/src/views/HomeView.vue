@@ -26,6 +26,7 @@ import {
 import { haptic } from '@/utils/haptics'
 import {
   displayInputToStoredLbsString,
+  finalizeDisplayWeightToStoredLbs,
   formatMaxWeightDisplay,
   formatWeightWithUnit,
   parseStoredLbs,
@@ -664,6 +665,12 @@ const liftHref = computed(() => `/workout/${today}`)
                 :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
                 @input="
                   addGoalWeightStoredLbs = displayInputToStoredLbsString(
+                    ($event.target as HTMLInputElement).value,
+                    weightUnit,
+                  )
+                "
+                @blur="
+                  addGoalWeightStoredLbs = finalizeDisplayWeightToStoredLbs(
                     ($event.target as HTMLInputElement).value,
                     weightUnit,
                   )

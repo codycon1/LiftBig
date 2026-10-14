@@ -115,6 +115,7 @@ const emit = defineEmits<{
       targetDistance: string
       targetTimeSeconds: string
     }>,
+    meta?: { finalizeWeight?: boolean },
   ]
   updateNotes: [notes: string]
   updateLoggedCalories: [value: string]
@@ -319,12 +320,14 @@ watch(
       props.exercise.name,
       props.exercise.targetReps,
       props.exercise.targetWeight,
-      props.exercise.sets,
-      props.workoutLog,
+      props.exercise.sets
+        .map((set) => `${set.id}:${set.reps}:${set.weight}:${set.isWarmup ? 1 : 0}`)
+        .join('|'),
       props.sessionDateKey,
       weightUnit.value,
       isCardio.value,
       isCore.value,
+      props.workoutLog,
     ] as const,
   () => {
     if (props.exercise.isCircuit || isCardio.value || isCore.value) {
@@ -358,7 +361,7 @@ watch(
       reason: pred.reason,
     }
   },
-  { deep: true, immediate: true },
+  { immediate: true },
 )
 
 const completedSets = computed(() => {
@@ -703,6 +706,13 @@ function pickLinkPartner(partnerId: string) {
             class="mt-0.5 w-full rounded-lg border border-border bg-card-inner px-2 py-1.5 text-[13px] text-foreground outline-none focus:border-primary"
             :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
             @input="emit('updateGoals', { targetWeight: ($event.target as HTMLInputElement).value })"
+            @blur="
+              emit(
+                'updateGoals',
+                { targetWeight: ($event.target as HTMLInputElement).value },
+                { finalizeWeight: true },
+              )
+            "
           />
         </div>
       </div>
@@ -762,7 +772,7 @@ function pickLinkPartner(partnerId: string) {
     <template v-if="exercise.isCircuit">
       <CircuitSetRow
         v-for="(set, index) in exercise.sets"
-        :key="set.id"
+        :key="`${set.id}-${index}`"
         :set="set"
         :index="index"
         :exercise="exercise"
@@ -785,7 +795,7 @@ function pickLinkPartner(partnerId: string) {
       </div>
       <SetRow
         v-for="(set, index) in exercise.sets"
-        :key="set.id"
+        :key="`${set.id}-${index}`"
         :set="set"
         :index="index"
         :next-set-id="index < exercise.sets.length - 1 ? exercise.sets[index + 1]?.id : undefined"

@@ -2,15 +2,12 @@
 import { computed, inject, ref } from 'vue'
 import CoreDurationInput from '@/components/workout/CoreDurationInput.vue'
 import { settingsInjectionKey } from '@/composables/injectionKeys'
+import { useWeightFieldDraft } from '@/composables/useWeightFieldDraft'
 import type { Exercise } from '@/types/workout'
 import { coreTargetTimeSeconds, parseSecondsFromGoalText } from '@/types/workout'
 import { formatCircuitSetLine } from '@/utils/circuitExerciseDisplay'
 import { haptic } from '@/utils/haptics'
-import {
-  displayInputToStoredLbsString,
-  storedLbsStringToDisplay,
-  type WeightUnit,
-} from '@/utils/units'
+import type { WeightUnit } from '@/utils/units'
 
 const props = defineProps<{
   set: Exercise['sets'][number]
@@ -25,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const settings = inject(settingsInjectionKey)!
+const weightField = useWeightFieldDraft(computed(() => settings.weightUnit.value))
 const editing = ref(false)
 
 const summaryLine = computed(() =>
@@ -42,7 +40,17 @@ const durationGoalSeconds = computed(() => {
 })
 
 function onWeightInput(raw: string) {
-  emit('update', 'weight', displayInputToStoredLbsString(raw, settings.weightUnit.value))
+  const next = weightField.input(raw)
+  if (next != null) emit('update', 'weight', next)
+}
+
+function onWeightFocus() {
+  weightField.focus(props.set.weight)
+}
+
+function onWeightBlur() {
+  if (!weightField.focused.value) return
+  emit('update', 'weight', weightField.blur())
 }
 
 function onToggleClick() {
@@ -89,13 +97,15 @@ function onToggleClick() {
           Weight
         </label>
         <input
-          :value="storedLbsStringToDisplay(set.weight, weightUnit)"
+          :value="weightField.display(set.weight)"
           type="text"
           inputmode="decimal"
           data-touch-input
           data-workout-set-input
           class="w-full rounded-lg border border-border bg-card-inner px-2 py-1.5 text-center text-sm text-foreground outline-none focus:border-primary"
           :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
+          @focus="onWeightFocus"
+          @blur="onWeightBlur"
           @input="onWeightInput(($event.target as HTMLInputElement).value)"
         />
       </div>

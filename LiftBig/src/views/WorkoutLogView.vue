@@ -27,7 +27,11 @@ import {
   resolveManualExerciseInput,
 } from '@/utils/exerciseLibrary'
 import { applyPredictedGoalsToExercises } from '@/utils/progressiveOverload'
-import { displayInputToStoredLbsString, storedLbsStringToDisplay } from '@/utils/units'
+import {
+  displayInputToStoredLbsString,
+  finalizeDisplayWeightToStoredLbs,
+  storedLbsStringToDisplay,
+} from '@/utils/units'
 import {
   applyLiftBigBackupToStorage,
   collectLiftBigBackupPayload,
@@ -40,6 +44,7 @@ import {
   formatWorkoutCalories,
 } from '@/utils/workoutCalories'
 import { logExercisesToTemplate } from '@/utils/logToTemplate'
+import { separateRepeatedSupersetGroups, withUniqueExerciseIds } from '@/utils/templateToLog'
 import {
   exerciseInSuperset,
   groupExercisesForDisplay,
@@ -184,19 +189,33 @@ function normalizeExerciseForLog(ex: Exercise): Exercise {
   return { ...ex, isCore: true }
 }
 
+/** True while loadDay is writing the editor copy, so that write does not save back into itself. */
+let applyingDay = false
+
 function loadDay() {
   const k = dateKey.value
   if (!k) return
   if (workoutNotesBoundDate && workoutNotesBoundDate !== k) {
     flushWorkoutNotesForDate(workoutNotesBoundDate)
   }
-  const loaded = (JSON.parse(JSON.stringify(workouts.getDay(k))) as Exercise[]).map(
-    normalizeExerciseForLog,
+  const loaded = separateRepeatedSupersetGroups(
+    withUniqueExerciseIds(
+      (JSON.parse(JSON.stringify(workouts.getDay(k))) as Exercise[]).map(normalizeExerciseForLog),
+    ),
   )
   applyPredictedGoalsToExercises(loaded, workouts.log.value, k)
-  exercises.value = applyBodyWeightDefaultsToExercises(loaded, settings.bodyWeightLbs.value)
+  applyingDay = true
+  try {
+    exercises.value = applyBodyWeightDefaultsToExercises(loaded, settings.bodyWeightLbs.value)
+  } finally {
+    applyingDay = false
+  }
   workoutNotesDraft.value = workouts.getDayNotesForDate(k)
   workoutNotesBoundDate = k
+  const snap = JSON.stringify(exercises.value)
+  if (snap !== JSON.stringify(workouts.getDay(k))) {
+    workouts.setDay(k, JSON.parse(snap) as Exercise[])
+  }
 }
 
 watch(dateKey, loadDay, { immediate: true })
@@ -213,8 +232,10 @@ watch(
   exercises,
   (list) => {
     const k = dateKey.value
-    if (!k) return
-    workouts.setDay(k, JSON.parse(JSON.stringify(list)) as Exercise[])
+    if (!k || applyingDay) return
+    const snap = JSON.stringify(list)
+    if (snap === JSON.stringify(workouts.getDay(k))) return
+    workouts.setDay(k, JSON.parse(snap) as Exercise[])
   },
   { deep: true },
 )
@@ -431,6 +452,7 @@ function updateExerciseGoals(
     targetDistance: string
     targetTimeSeconds: string
   }>,
+  meta?: { finalizeWeight?: boolean },
 ) {
   exercises.value = exercises.value.map((ex) => {
     if (ex.id !== exerciseId) return ex
@@ -454,7 +476,9 @@ function updateExerciseGoals(
     if (patch.targetWeight !== undefined) {
       const t = patch.targetWeight.trim()
       next.targetWeight = t
-        ? displayInputToStoredLbsString(t, settings.weightUnit.value)
+        ? meta?.finalizeWeight
+          ? finalizeDisplayWeightToStoredLbs(t, settings.weightUnit.value)
+          : displayInputToStoredLbsString(t, settings.weightUnit.value)
         : undefined
     }
     return next
@@ -743,7 +767,11 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
       <div v-if="exercises.length > 0" ref="exerciseListEl">
         <template
           v-for="item in exerciseDisplayItems"
-          :key="item.kind === 'standalone' ? item.exercise.id : item.groupId"
+          :key="
+            item.kind === 'standalone'
+              ? `ex-${item.exercise.id}`
+              : `ss-${item.groupId}-${item.exercises[0]?.id ?? ''}`
+          "
         >
           <div v-if="item.kind === 'superset'" class="workout-sortable-item mb-3.5">
             <div
@@ -772,7 +800,7 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
               </button>
             </div>
 
-            <template v-for="(ex, index) in item.exercises" :key="ex.id">
+            <template v-for="(ex, index) in item.exercises" :key="`${ex.id}-${index}`">
               <div
                 v-if="index > 0"
                 class="flex items-center justify-center border-x-2 px-2 py-1 transition-colors duration-200"
@@ -806,7 +834,7 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
                 @delete-set="(setId) => deleteSet(ex.id, setId)"
                 @swap-exercise="openSwapExercise(ex.id)"
                 @delete-exercise="deleteExercise(ex.id)"
-                @update-goals="(patch) => updateExerciseGoals(ex.id, patch)"
+                @update-goals="(patch, meta) => updateExerciseGoals(ex.id, patch, meta)"
                 @update-notes="(n) => updateExerciseNotes(ex.id, n)"
                 @update-logged-calories="(v) => updateExerciseLoggedCalories(ex.id, v)"
               />
@@ -827,7 +855,7 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
               @delete-set="(setId) => deleteSet(item.exercise.id, setId)"
               @swap-exercise="openSwapExercise(item.exercise.id)"
               @delete-exercise="deleteExercise(item.exercise.id)"
-              @update-goals="(patch) => updateExerciseGoals(item.exercise.id, patch)"
+              @update-goals="(patch, meta) => updateExerciseGoals(item.exercise.id, patch, meta)"
               @update-notes="(n) => updateExerciseNotes(item.exercise.id, n)"
               @update-logged-calories="(v) => updateExerciseLoggedCalories(item.exercise.id, v)"
               @link-with-next="linkWithNextExercise(item.exercise.id)"
@@ -884,6 +912,12 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
                   :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
                   @input="
                     goalWeightStoredLbs = displayInputToStoredLbsString(
+                      ($event.target as HTMLInputElement).value,
+                      weightUnit,
+                    )
+                  "
+                  @blur="
+                    goalWeightStoredLbs = finalizeDisplayWeightToStoredLbs(
                       ($event.target as HTMLInputElement).value,
                       weightUnit,
                     )

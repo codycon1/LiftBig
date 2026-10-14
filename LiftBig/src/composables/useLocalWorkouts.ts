@@ -152,19 +152,35 @@ export function useLocalWorkouts() {
 
   /** Assign a plan template to a calendar day (merges exercises; sets plan name, folder, and coaching notes). */
   function assignPlanToDate(dateKey: string, template: WorkoutTemplate, folderName?: string) {
-    const existing = getDayExercises(log.value[dateKey])
-    const preservedNotes = dayNotes(log.value[dateKey])
+    const prior = log.value[dateKey]
+    const existing = getDayExercises(prior)
+    const preservedNotes = dayNotes(prior)
     const added = applyBodyWeightDefaultsToExercises(
       cloneTemplateToExercises(template),
       readStoredBodyWeightLbs(),
     )
+    const priorName = getDayPlanName(prior)
+    const stacking =
+      added.length > 0 &&
+      !!priorName &&
+      priorName !== template.name &&
+      (existing.length > 0 || isRestDayEntry(prior))
     const entry: WorkoutDay = {
       exercises: [...existing, ...added],
-      planName: template.name,
+      planName: stacking ? `${priorName} + ${template.name}` : template.name,
     }
     if (folderName) entry.planFolderName = folderName
-    if (template.notes?.trim()) entry.planNotes = template.notes.trim()
+    const incomingNotes = template.notes?.trim()
+    const priorNotes = getDayPlanNotes(prior)
+    if (stacking && priorNotes && incomingNotes) {
+      entry.planNotes = `${priorNotes}\n\n${template.name}\n${incomingNotes}`
+    } else if (incomingNotes) {
+      entry.planNotes = incomingNotes
+    } else if (stacking && priorNotes) {
+      entry.planNotes = priorNotes
+    }
     if (preservedNotes !== undefined) entry.notes = preservedNotes
+    if (added.length === 0 && existing.length === 0) entry.isRestDay = true
     log.value = { ...log.value, [dateKey]: entry }
     flush()
   }
@@ -178,21 +194,7 @@ export function useLocalWorkouts() {
   ) {
     const r = Math.min(6, Math.max(0, Math.round(restDaysPerWeek)))
     if (r === 0) {
-      const existing = getDayExercises(log.value[startDateKey])
-      const preservedNotes = dayNotes(log.value[startDateKey])
-      const added = applyBodyWeightDefaultsToExercises(
-        cloneTemplateToExercises(template),
-        readStoredBodyWeightLbs(),
-      )
-      const entry: WorkoutDay = {
-        exercises: [...existing, ...added],
-        planName: template.name,
-      }
-      if (folderName) entry.planFolderName = folderName
-      if (template.notes?.trim()) entry.planNotes = template.notes.trim()
-      if (preservedNotes !== undefined) entry.notes = preservedNotes
-      log.value = { ...log.value, [startDateKey]: entry }
-      flush()
+      assignPlanToDate(startDateKey, template, folderName)
       return
     }
 

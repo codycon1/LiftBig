@@ -15,7 +15,11 @@ import {
   planDurationAssumptionsFromSeconds,
 } from '@/utils/planDuration'
 import type { WeightUnit } from '@/utils/units'
-import { displayInputToStoredLbsString, storedLbsStringToDisplay } from '@/utils/units'
+import {
+  displayInputToStoredLbsString,
+  finalizeDisplayWeightToStoredLbs,
+  storedLbsStringToDisplay,
+} from '@/utils/units'
 
 const settings = inject(settingsInjectionKey)!
 const favorites = inject(libraryFavoritesInjectionKey)!
@@ -240,10 +244,12 @@ function removeExercise(index: number) {
   exercises.value = exercises.value.filter((_, i) => i !== index)
 }
 
-function onTargetWeightInput(exIndex: number, setIndex: number, raw: string) {
+function onTargetWeightInput(exIndex: number, setIndex: number, raw: string, finalize = false) {
   const ex = exercises.value[exIndex]
   if (!ex) return
-  const next = displayInputToStoredLbsString(raw, props.weightUnit)
+  const next = finalize
+    ? finalizeDisplayWeightToStoredLbs(raw, props.weightUnit)
+    : displayInputToStoredLbsString(raw, props.weightUnit)
 
   if (setIndex === 0) {
     const prevGoal = (ex.targetWeight ?? '').trim()
@@ -310,10 +316,28 @@ function onCardioDistanceInput(exIndex: number, raw: string) {
   })
 }
 
-function onGoalWeightInput(exIndex: number, raw: string) {
+function onTargetWeightBlur(exIndex: number, setIndex: number, raw: string) {
+  const ex = exercises.value[exIndex]
+  const current = (ex?.sets[setIndex]?.targetWeight ?? '').trim()
+  const next = finalizeDisplayWeightToStoredLbs(raw, props.weightUnit)
+  if (next === current) return
+  onTargetWeightInput(exIndex, setIndex, raw, true)
+}
+
+function onGoalWeightBlur(exIndex: number, raw: string) {
+  const ex = exercises.value[exIndex]
+  const current = (ex?.targetWeight ?? '').trim()
+  const next = finalizeDisplayWeightToStoredLbs(raw, props.weightUnit)
+  if (next === current) return
+  onGoalWeightInput(exIndex, raw, true)
+}
+
+function onGoalWeightInput(exIndex: number, raw: string, finalize = false) {
   const ex = exercises.value[exIndex]
   if (!ex) return
-  const next = displayInputToStoredLbsString(raw, props.weightUnit)
+  const next = finalize
+    ? finalizeDisplayWeightToStoredLbs(raw, props.weightUnit)
+    : displayInputToStoredLbsString(raw, props.weightUnit)
   updateExercise(exIndex, {
     ...ex,
     targetWeight: next,
@@ -471,6 +495,7 @@ function save() {
                     class="mt-0.5 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-[13px] text-foreground outline-none focus:border-primary"
                     :placeholder="weightUnit === 'lb' ? 'lb' : 'kg'"
                     @input="onGoalWeightInput(ei, ($event.target as HTMLInputElement).value)"
+                    @blur="onGoalWeightBlur(ei, ($event.target as HTMLInputElement).value)"
                   />
                 </div>
               </div>
@@ -538,6 +563,7 @@ function save() {
                 inputmode="decimal"
                 class="min-w-0 w-full rounded border border-border bg-background px-1 py-1 text-center text-sm text-foreground"
                 @input="onTargetWeightInput(ei, si, ($event.target as HTMLInputElement).value)"
+                @blur="onTargetWeightBlur(ei, si, ($event.target as HTMLInputElement).value)"
               />
               <button
                 type="button"
