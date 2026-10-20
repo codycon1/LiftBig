@@ -195,7 +195,16 @@ watch(
                     aria-hidden="true"
                   />
                 </button>
-                <h2 class="text-sm font-extrabold text-foreground">{{ entry.folder.name }}</h2>
+                <h2 class="min-w-0">
+                  <button
+                    type="button"
+                    class="text-left text-sm font-extrabold text-foreground"
+                    :aria-expanded="isFolderOpen(entry.folder.id)"
+                    @click="toggleFolder(entry.folder.id)"
+                  >
+                    {{ entry.folder.name }}
+                  </button>
+                </h2>
               </div>
               <span class="text-[10px] font-bold uppercase tracking-wide text-muted">
                 {{ entry.plans.length }}

@@ -83,6 +83,10 @@ const exerciseCount = computed(() => dayExercises.value.length)
 const dayPlanName = computed(() => workouts.getPlanName(selectedDate.value))
 const dayPlanFolderName = computed(() => workouts.getPlanFolderName(selectedDate.value))
 const dayPlanNotes = computed(() => workouts.getPlanNotes(selectedDate.value))
+const dayDetailsOpen = ref(false)
+watch(selectedDate, () => {
+  dayDetailsOpen.value = false
+})
 
 const trained = computed(() => trainedDaysInMonth(workoutLogPlain.value))
 const loggedRest = computed(() => loggedRestDaysInMonth(workoutLogPlain.value))
@@ -520,16 +524,33 @@ const liftHref = computed(() => `/workout/${today}`)
           <span class="text-base font-extrabold text-foreground">{{ dayPlanName }}</span>
           <span v-if="dayPlanFolderName" class="ml-1.5 text-xs text-muted">({{ dayPlanFolderName }})</span>
         </p>
-        <p
-          v-if="dayPlanNotes"
-          class="mt-2 whitespace-pre-line rounded-lg border border-border bg-card-inner/60 px-2.5 py-2 text-xs leading-relaxed text-foreground"
-        >
-          {{ dayPlanNotes }}
-        </p>
-        <p class="mt-2 text-xs text-muted">
-          {{ selectedDayDuration }} · {{ selectedDayStats.sets }} sets · {{ selectedDayStats.reps }} total reps (where entered) ·
-          max {{ formatMaxWeightDisplay(selectedDayStats.maxW, weightUnit) }}
-        </p>
+        <div class="mt-2">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-foreground"
+            :aria-expanded="dayDetailsOpen"
+            @click="dayDetailsOpen = !dayDetailsOpen"
+          >
+            <i
+              class="fa-solid fa-chevron-right text-[10px] text-muted transition-transform"
+              :class="dayDetailsOpen ? 'rotate-90' : ''"
+              aria-hidden="true"
+            />
+            Details
+          </button>
+          <div v-if="dayDetailsOpen" class="mt-2">
+            <p
+              v-if="dayPlanNotes"
+              class="whitespace-pre-line rounded-lg border border-border bg-card-inner/60 px-2.5 py-2 text-xs leading-relaxed text-foreground"
+            >
+              {{ dayPlanNotes }}
+            </p>
+            <p class="text-xs text-muted" :class="dayPlanNotes ? 'mt-2' : ''">
+              {{ selectedDayDuration }} · {{ selectedDayStats.sets }} sets · {{ selectedDayStats.reps }} total reps (where entered) ·
+              max {{ formatMaxWeightDisplay(selectedDayStats.maxW, weightUnit) }}
+            </p>
+          </div>
+        </div>
         <ul ref="homeExerciseListEl" class="mt-3 space-y-2">
           <li
             v-for="ex in dayExercises"
@@ -537,7 +558,7 @@ const liftHref = computed(() => `/workout/${today}`)
             class="flex items-center gap-2 rounded-lg border border-border bg-card-inner px-3 py-2"
           >
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <RouterLink
                   :to="`/workout/${selectedDate}`"
                   class="exercise-reorder-handle cursor-grab font-bold text-foreground hover:text-primary active:cursor-grabbing touch-manipulation select-none"
@@ -545,21 +566,21 @@ const liftHref = computed(() => `/workout/${today}`)
                 >
                   {{ ex.name }}
                 </RouterLink>
+                <button
+                  v-if="ex.libraryId && getLibraryExercise(ex.libraryId)"
+                  type="button"
+                  class="shrink-0 text-primary hover:text-foreground"
+                  aria-label="How to perform this exercise"
+                  @click="openLibraryDetail(ex.libraryId)"
+                >
+                  <i class="fa-solid fa-circle-info text-xs" aria-hidden="true" />
+                </button>
                 <span
                   v-if="supersetBadgeLabel(ex)"
                   class="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary"
                 >
                   {{ supersetBadgeLabel(ex) }}
                 </span>
-                <button
-                  v-if="ex.libraryId && getLibraryExercise(ex.libraryId)"
-                  type="button"
-                  class="text-primary hover:text-foreground"
-                  aria-label="How to perform this exercise"
-                  @click="openLibraryDetail(ex.libraryId)"
-                >
-                  <i class="fa-solid fa-circle-info text-xs" aria-hidden="true" />
-                </button>
               </div>
               <div class="flex items-center gap-1.5">
                 <span class="text-xs text-muted">{{ exerciseGoalLabel(ex) }}</span>

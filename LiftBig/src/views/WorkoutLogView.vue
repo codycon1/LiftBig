@@ -97,6 +97,10 @@ const weightUnit = computed(() => settings.weightUnit.value)
 const planName = computed(() => workouts.getPlanName(dateKey.value))
 const planFolderName = computed(() => workouts.getPlanFolderName(dateKey.value))
 const planCoachingNotes = computed(() => workouts.getPlanNotes(dateKey.value)?.trim() || undefined)
+const planDetailsOpen = ref(false)
+watch(dateKey, () => {
+  planDetailsOpen.value = false
+})
 
 const exerciseDisplayItems = computed(() => groupExercisesForDisplay(exercises.value))
 
@@ -739,14 +743,28 @@ const sheetBodyWeightLbs = computed(() => settings.bodyWeightLbs.value)
         v-if="planCoachingNotes"
         class="mb-3.5 rounded-xl border border-primary/35 bg-card-inner/70 p-3.5"
       >
-        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h2 class="text-sm font-bold uppercase tracking-wide text-primary">Today's plan</h2>
-          <p v-if="planName" class="text-sm font-extrabold text-foreground">{{ planName }}</p>
-          <p v-if="planFolderName" class="text-xs text-muted">({{ planFolderName }})</p>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-primary"
+          :aria-expanded="planDetailsOpen"
+          @click="planDetailsOpen = !planDetailsOpen"
+        >
+          <i
+            class="fa-solid fa-chevron-right text-[10px] transition-transform"
+            :class="planDetailsOpen ? 'rotate-90' : ''"
+            aria-hidden="true"
+          />
+          Details
+        </button>
+        <div v-if="planDetailsOpen" class="mt-2">
+          <div v-if="planName || planFolderName" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p v-if="planName" class="text-sm font-extrabold text-foreground">{{ planName }}</p>
+            <p v-if="planFolderName" class="text-xs text-muted">({{ planFolderName }})</p>
+          </div>
+          <p class="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground">
+            {{ planCoachingNotes }}
+          </p>
         </div>
-        <p class="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground">
-          {{ planCoachingNotes }}
-        </p>
       </section>
       <section class="mb-3.5 rounded-xl border border-border bg-card p-3.5">
         <h2 class="text-sm font-bold uppercase tracking-wide text-muted">Notes</h2>
